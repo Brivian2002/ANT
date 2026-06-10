@@ -51,7 +51,13 @@ export default function PaymentCallback({ token, onNavigate, onRefreshUser }: Pa
           }
         });
 
-        const data = await res.json();
+        let data: any = {};
+        try {
+          const text = await res.text();
+          data = JSON.parse(text);
+        } catch (jsonErr) {
+          throw new Error(`Response from server was not in JSON format (Status ${res.status}). Server might be offline or starting up.`);
+        }
         
         if (res.ok && data.status === "success") {
           setSuccess(true);
