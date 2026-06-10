@@ -6,14 +6,14 @@
   "installCommand": "npm install",
   "framework": "vite",
   "functions": {
-    "api/index.js": {
+    "api/index.ts": {
       "runtime": "nodejs20.x"
     }
   },
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/index.js"
+      "dest": "/api/index.ts"
     },
     {
       "src": "/payment/callback",
