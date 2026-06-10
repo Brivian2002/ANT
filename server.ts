@@ -1,7 +1,8 @@
+import dotenv from "dotenv";
+dotenv.config();
 import express from "express";
 import path from "path";
 import crypto from "crypto";
-import { createServer as createViteServer } from "vite";
 import { dbManager, initializeDatabaseAsync, User, Product, Category, Order, OrderItem, Review, Announcement, Settings, Notification, ProductImage, SessionLog, WithdrawalRecord } from "./src/db/db.js";
 import fs from "fs";
 
@@ -1539,6 +1540,7 @@ async function startServer() {
 
   // Vite dev integration inside sandboxed iFrame
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
