@@ -1,0 +1,6 @@
+{
+  "name": "Dataghmart",
+  "description": "An premium full-stack Ghanaian e-commerce platform featuring role-based dashboards, Paystack checkouts and withdrawals, ad boosting systems, granular region and timing filters, and delivery tracker progress rings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
