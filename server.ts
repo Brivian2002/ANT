@@ -3,7 +3,7 @@ dotenv.config();
 import express from "express";
 import path from "path";
 import crypto from "crypto";
-import { dbManager, initializeDatabaseAsync, User, Product, Category, Order, OrderItem, Review, Announcement, Settings, Notification, ProductImage, SessionLog, WithdrawalRecord } from "./src/db/db.js";
+import { dbManager, initializeDatabaseAsync, User, Product, Category, Order, OrderItem, Review, Announcement, Settings, Notification, ProductImage, SessionLog, WithdrawalRecord } from "./src/db/db";
 import fs from "fs";
 
 // Helper password hashing (matching db.ts sha256 method)
