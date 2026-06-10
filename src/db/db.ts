@@ -214,10 +214,123 @@ interface DatabaseSchema {
   withdrawals: WithdrawalRecord[];
 }
 
-const DB_FILE_PATH = path.join(process.cwd(), "db.json");
+import { createClient } from "@supabase/supabase-js";
+
+const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
+// Prioritize SUPABASE_SERVICE_ROLE_KEY to bypass storage RLS, fallback to anon key
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+
+let supabase: any = null;
+if (supabaseUrl && supabaseKey) {
+  try {
+    supabase = createClient(supabaseUrl, supabaseKey, {
+      auth: { persistSession: false }
+    });
+  } catch (err) {
+    console.error("Failed to initialize Supabase client in db.ts:", err);
+  }
+}
+
+// On Vercel, process.cwd() is read-only, so use /tmp
+const DB_FILE_PATH = process.env.VERCEL 
+  ? path.join("/tmp", "db.json") 
+  : path.join(process.cwd(), "db.json");
 
 // Intrinsic locks to prevent concurrent write issues
 let isWriting = false;
+
+// Bucket assertion helper to automate project onboarding
+async function ensureBucketExists(): Promise<void> {
+  if (!supabase) return;
+  try {
+    const { data: buckets, error: listError } = await supabase.storage.listBuckets();
+    if (listError) {
+      console.warn("Could not list buckets:", listError.message);
+      return;
+    }
+    const hasAvatars = buckets?.some((b: any) => b.name === "avatars");
+    if (!hasAvatars) {
+      console.log("Bucket 'avatars' not found in Supabase storage. Automatically creating bucket...");
+      const { error: createError } = await supabase.storage.createBucket("avatars", {
+        public: true,
+        fileSizeLimit: 52428800 // 50MB
+      });
+      if (createError) {
+        console.warn("Failed to create bucket 'avatars':", createError.message);
+      } else {
+        console.log("Bucket 'avatars' created successfully!");
+      }
+    }
+  } catch (err: any) {
+    console.warn("Error in ensureBucketExists:", err.message);
+  }
+}
+
+// Upload helper
+async function uploadRemoteDatabase(db: DatabaseSchema): Promise<void> {
+  if (!supabase) return;
+  try {
+    await ensureBucketExists();
+    const jsonStr = JSON.stringify(db, null, 2);
+    // In Node server, we can use a Buffer for storage upload
+    const buffer = Buffer.from(jsonStr, "utf-8");
+    
+    // We try to upload to 'avatars' bucket (guaranteed to be set up) as 'db_state.json'
+    const { error } = await supabase.storage
+      .from("avatars")
+      .upload("db_state.json", buffer, {
+        upsert: true,
+        contentType: "application/json"
+      });
+
+    if (error) {
+      console.error("Supabase Storage upload error:", error.message);
+    } else {
+      console.log("Database state successfully saved and backed up to Supabase storage!");
+    }
+  } catch (err: any) {
+    console.error("Error in uploadRemoteDatabase:", err.message);
+  }
+}
+
+// Global async initializer
+export async function initializeDatabaseAsync(): Promise<void> {
+  if (!supabase) {
+    console.log("Supabase credentials missing or unconfigured. Running in local filesystem mode.");
+    return;
+  }
+
+  try {
+    await ensureBucketExists();
+    console.log("Attempting to restore database state from Supabase storage...");
+    const { data, error } = await supabase.storage
+      .from("avatars")
+      .download("db_state.json");
+
+    if (error) {
+      if (error.message && (error.message.includes("Object not found") || error.message.includes("does not exist") || error.message.includes("does not have"))) {
+        console.log("No remote database state found in Supabase storage yet. Seeding default database...");
+        const initialDb = createInitialSeedData();
+        saveDatabaseSync(initialDb);
+        await uploadRemoteDatabase(initialDb);
+      } else {
+        console.warn("Supabase download warning:", error.message);
+      }
+      return;
+    }
+
+    if (data) {
+      const text = await data.text();
+      const parsed = JSON.parse(text);
+      if (parsed && typeof parsed === "object" && Array.isArray(parsed.users)) {
+        saveDatabaseSync(parsed);
+        console.log("Database state successfully synchronized from Supabase storage.");
+      }
+    }
+  } catch (syncErr: any) {
+    console.error("Failed to synchronize database state on startup:", syncErr.message);
+  }
+}
 
 function loadDatabase(): DatabaseSchema {
   if (!fs.existsSync(DB_FILE_PATH)) {
@@ -239,6 +352,11 @@ function loadDatabase(): DatabaseSchema {
 function saveDatabaseSync(db: DatabaseSchema) {
   try {
     const data = JSON.stringify(db, null, 2);
+    // Ensure parent directory exists for /tmp or custom paths
+    const parentDir = path.dirname(DB_FILE_PATH);
+    if (!fs.existsSync(parentDir)) {
+      fs.mkdirSync(parentDir, { recursive: true });
+    }
     // Write via a temp file for solid atomic safety
     const tempPath = `${DB_FILE_PATH}.tmp`;
     fs.writeFileSync(tempPath, data, "utf-8");
@@ -262,6 +380,13 @@ export function saveDatabase(db: DatabaseSchema): Promise<void> {
       saveDatabaseSync(db);
       isWriting = false;
       resolve();
+
+      // Trigger background upload to Supabase state storage
+      if (supabase) {
+        uploadRemoteDatabase(db).catch(err => {
+          console.error("Background Supabase sync upload failed:", err.message);
+        });
+      }
     } catch (err) {
       isWriting = false;
       reject(err);
