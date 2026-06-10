@@ -214,11 +214,22 @@ interface DatabaseSchema {
   withdrawals: WithdrawalRecord[];
 }
 
+import dotenv from "dotenv";
+dotenv.config();
 import { createClient } from "@supabase/supabase-js";
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || "";
+const sanitizeEnvVar = (val: string) => {
+  if (!val) return "";
+  let s = val.trim();
+  if ((s.startsWith('"') && s.endsWith('"')) || (s.startsWith("'") && s.endsWith("'"))) {
+    s = s.slice(1, -1);
+  }
+  return s.trim();
+};
+
+const supabaseUrl = sanitizeEnvVar(process.env.VITE_SUPABASE_URL || "");
 // Prioritize SUPABASE_SERVICE_ROLE_KEY to bypass storage RLS, fallback to anon key
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "";
+const supabaseKey = sanitizeEnvVar(process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || "");
 
 let supabase: any = null;
 if (supabaseUrl && supabaseKey) {
