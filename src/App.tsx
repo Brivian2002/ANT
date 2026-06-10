@@ -11,6 +11,59 @@ import PaymentCallback from "./components/PaymentCallback";
 export default function App() {
   const [activeTab, setActiveTab] = React.useState<string>("home");
   
+  // Modern custom dynamic layout toast notifications list
+  interface ToastItem {
+    id: string;
+    message: string;
+    type: "success" | "error" | "info";
+  }
+  const [toasts, setToasts] = React.useState<ToastItem[]>([]);
+
+  const showToast = React.useCallback((message: string, type: "success" | "error" | "info" = "info") => {
+    const id = Math.random().toString(36).substring(2, 9);
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => {
+      setToasts(prev => prev.filter(t => t.id !== id));
+    }, 4500);
+  }, []);
+
+  // Intercept standard window.alert calls inside the iframe for pristine visual experience
+  React.useEffect(() => {
+    const handleAlertOverride = (msg: string) => {
+      if (!msg) return;
+      const lower = msg.toLowerCase();
+      // Heuristic detection of success or failure states for gorgeous custom styled styling
+      let toastType: "success" | "error" | "info" = "info";
+      if (
+        lower.includes("success") || 
+        lower.includes("approved") || 
+        lower.includes("published") || 
+        lower.includes("added") || 
+        lower.includes("credited") || 
+        lower.includes("authorized") ||
+        lower.includes("saved") ||
+        lower.includes("complete")
+      ) {
+        toastType = "success";
+      } else if (
+        lower.includes("error") || 
+        lower.includes("failed") || 
+        lower.includes("invalid") || 
+        lower.includes("required") || 
+        lower.includes("missing") || 
+        lower.includes("limit") || 
+        lower.includes("unsuccessful") ||
+        lower.includes("insufficient") ||
+        lower.includes("conflict")
+      ) {
+        toastType = "error";
+      }
+      showToast(msg, toastType);
+    };
+
+    window.alert = handleAlertOverride;
+  }, [showToast]);
+
   // Authorization Session State
   const [user, setUser] = React.useState<UserProfile | null>(null);
   const [token, setToken] = React.useState<string | null>(null);
@@ -1415,6 +1468,30 @@ export default function App() {
           onOrderSuccess={handleOrderCompletionSuccess}
         />
       )}
+
+      {/* Dynamic Toast notifications portal floating rendering */}
+      <div className="fixed bottom-5 right-5 z-[9999] flex flex-col gap-2 max-w-sm w-full pointer-events-none">
+        {toasts.map(t => (
+          <div
+            key={t.id}
+            className={`pointer-events-auto p-4 rounded-xl shadow-lg border text-xs font-sans font-medium flex items-center justify-between gap-3 animate-in slide-in-from-bottom duration-250 ${
+              t.type === "success" 
+                ? "bg-emerald-900 border-emerald-850 text-white" 
+                : t.type === "error" 
+                  ? "bg-rose-900 border-rose-850 text-white" 
+                  : "bg-neutral-900 border-neutral-850 text-white"
+            }`}
+          >
+            <span>{t.message}</span>
+            <button 
+              onClick={() => setToasts(prev => prev.filter(x => x.id !== t.id))}
+              className="text-white/60 hover:text-white cursor-pointer ml-2 text-[10px]"
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
